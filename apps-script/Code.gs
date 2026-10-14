@@ -2,7 +2,7 @@
  * ============================================================
  *  دليل الاتصال — SRU Contact Directory
  *  Sulaiman Al Rajhi University · ICTD · ITOC
- *  Version : 2.0
+ *  Version : 2.4
  *  Backend : Google Apps Script (Web App) + People API (Directory)
  * ============================================================
  *  Data source : synced from the owner's own Google account (no Admin console):
@@ -15,7 +15,7 @@
  */
 
 const CONFIG = {
-  VERSION: '2.0',
+  VERSION: '2.4',
   APP_NAME_AR: 'دليل الاتصال',
   APP_NAME_EN: 'SRU Contact Directory',
   DOMAIN: 'sr.edu.sa',
@@ -41,12 +41,7 @@ const CONFIG = {
     'm.elmahdy@sr.edu.sa'
   ],
 
-  // Shared logo source (one place for all ITOC platforms) — update to your shared URLs
-  LOGOS: {
-    SRU:  'https://ictsru.github.io/ITOC/assets/logos/sru.png',
-    ICTD: 'https://ictsru.github.io/ITOC/assets/logos/ictd.png',
-    ITOC: 'https://ictsru.github.io/ITOC/assets/logos/itoc.png'
-  },
+  // Logos are embedded in Logos.gs (LOGO_DATA) — no external hosting needed
   ITOC_HUB_URL: 'https://ictsru.github.io/ITOC/#forms'
 };
 
@@ -66,6 +61,7 @@ function doGet(e) {
 
   const t = HtmlService.createTemplateFromFile(allowed ? 'Index' : 'Denied');
   t.cfg = CONFIG;
+  t.logos = LOGO_DATA;          // embedded official logos (Logos.gs)
   t.userEmail = email;
   t.isAdmin = CONFIG.ADMINS.map(String).map(s => s.toLowerCase()).indexOf(email) > -1;
 
@@ -224,7 +220,14 @@ function syncToSheet_() {
   });
 
   const synced = Object.keys(byEmail).length;
-  if (!synced) throw new Error('لم تُجلب أي سجلات من الحساب.\n' + report.join('\n'));
+  if (!synced) {
+    let hint = '';
+    if (/do not have permission|insufficient/i.test(report.join(' '))) {
+      try { const a = authStatus_(); if (a.required) hint = '\n\nAUTH_URL: ' + a.url; } catch (e) {}
+      hint = hint || '\n\nافتح رابط التطبيق مع ?admin=auth لاعتماد الصلاحيات.';
+    }
+    throw new Error('لم تُجلب أي سجلات من الحساب.\n' + report.join('\n') + hint);
+  }
 
   // Merge with what is already in the sheet (manual rows are preserved)
   const sh = getSheet_().getSheetByName('Directory') || getSheet_().insertSheet('Directory');
@@ -459,9 +462,29 @@ function diagnose() {
   return out.join('\n');
 }
 
+/** Scopes the account sync needs — must match appsscript.json. */
+const SYNC_SCOPES_ = [
+  'https://www.googleapis.com/auth/directory.readonly',
+  'https://www.googleapis.com/auth/contacts.readonly',
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/script.external_request'
+];
+
+/**
+ * Checks whether the owner has granted every scope the sync needs and, if not,
+ * returns Google's authorization URL so it can be approved from the browser.
+ */
+function authStatus_() {
+  let info;
+  try { info = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL, SYNC_SCOPES_); }
+  catch (e) { info = ScriptApp.getAuthorizationInfo(ScriptApp.AuthMode.FULL); }
+  const required = info.getAuthorizationStatus() === ScriptApp.AuthorizationStatus.REQUIRED;
+  return { required: required, url: required ? info.getAuthorizationUrl() : '' };
+}
+
 /** Renders the result of an admin action as a simple branded page (admins only). */
 function adminPage_(action, email, isAdmin) {
-  let title, body;
+  let title, body, authUrl = '';
   if (!isAdmin) {
     title = 'غير مصرّح';
     body = 'هذه الإجراءات متاحة لمشرفي الدليل فقط.\nالحساب: ' + email;
@@ -471,19 +494,27 @@ function adminPage_(action, email, isAdmin) {
       if (action === 'diagnose') body = diagnose();
       else if (action === 'setup') body = setup();
       else if (action === 'refresh') { const d = refreshDirectory(); body = 'Refreshed. Source: ' + d.source + ' | records: ' + d.total; }
+      else if (action === 'auth') {
+        const a = authStatus_();
+        body = a.required
+          ? 'الصلاحيات المطلوبة غير معتمدة بعد.\n\nاضغط الرابط أدناه، اختر حساب الجامعة، ثم فعّل «Select all» ووافق على جميع الصلاحيات (Contacts و Directory):\n\n' + a.url +
+            '\n\nبعد الموافقة ارجع وافتح ?admin=sync'
+          : '✅ جميع الصلاحيات المطلوبة معتمدة. افتح ?admin=sync أو اضغط «مزامنة من حسابي».';
+        authUrl = a.url;
+      }
       else if (action === 'sync') { const r = syncToSheet_(); const d = refreshDirectory(true); body = r.summary + '\n\nRecords now shown: ' + d.total; }
-      else body = 'Unknown action. Use: sync | diagnose | setup | refresh';
+      else body = 'Unknown action. Use: auth | sync | diagnose | setup | refresh';
     } catch (err) {
       body = '❌ ' + err.message + '\n\n' + (err.stack || '');
     }
   }
   const esc = t => String(t).replace(/[&<>]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'}[c]));
   const html = '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8">' +
-    '<style>body{font-family:Cairo,Tahoma,Arial,sans-serif;background:#f7f5fb;margin:0;padding:24px;color:#241436}' +
+    '<style>.lg{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.lg img{max-height:48px;max-width:45%}body{font-family:Cairo,Tahoma,Arial,sans-serif;background:#f7f5fb;margin:0;padding:24px;color:#241436}' +
     '.box{max-width:900px;margin:auto;background:#fff;border:1px solid rgba(80,30,140,.12);border-top:4px solid #501e8c;border-radius:4px;padding:20px}' +
     'h2{color:#501e8c;margin:0 0 12px}pre{white-space:pre-wrap;font-size:14px;line-height:1.8;background:#f0ebf8;padding:14px;border-radius:4px}' +
-    'a{color:#0a6eaa}</style></head><body><div class="box"><h2>' + esc(title) + '</h2><pre>' + esc(body) + '</pre>' +
-    '<p>' + ['sync', 'diagnose', 'setup', 'refresh'].map(a => '<a href="?admin=' + a + '">' + a + '</a>').join(' · ') +
+    'a{color:#0a6eaa}</style></head><body><div class="box"><div class="lg"><img src="' + LOGO_DATA.ICTD + '"><img src="' + LOGO_DATA.SRU + '"></div><h2>' + esc(title) + '</h2><pre>' + esc(body) + '</pre>' +
+    '<p>' + ['auth', 'sync', 'diagnose', 'setup', 'refresh'].map(a => '<a href="?admin=' + a + '">' + a + '</a>').join(' · ') +
     ' · <a href="?">فتح الدليل</a> — v' + CONFIG.VERSION + '</p></div></body></html>';
   return HtmlService.createHtmlOutput(html).setTitle('Contact Directory · ' + action);
 }

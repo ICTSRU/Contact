@@ -88,7 +88,7 @@
 
   footer{margin-top:30px;background:#fff;border-top:1px solid var(--border)}
   footer .wrap{display:flex;justify-content:space-between;align-items:center;min-height:64px;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
-  footer img{height:40px}
+  footer img{height:44px}
 
   @media (max-width:820px){
     .panel{grid-template-columns:1fr}
@@ -102,8 +102,8 @@
 
 <!-- Official header band: SRU right, ICTD left -->
 <div class="band"><div class="wrap">
-  <img src="<?= cfg.LOGOS.SRU ?>"  alt="جامعة سليمان الراجحي" onerror="this.style.visibility='hidden'">
-  <img src="<?= cfg.LOGOS.ICTD ?>" alt="الإدارة التنفيذية للاتصالات وتقنية المعلومات" onerror="this.style.visibility='hidden'">
+  <img src="<?!= logos.SRU ?>"  alt="جامعة سليمان الراجحي" onerror="this.style.visibility='hidden'">
+  <img src="<?!= logos.ICTD ?>" alt="الإدارة التنفيذية للاتصالات وتقنية المعلومات" onerror="this.style.visibility='hidden'">
 </div></div>
 <div class="topbar"><div class="wrap">
   <h1><i data-lucide="contact"></i> <?= cfg.APP_NAME_AR ?> <span class="ver">v<?= cfg.VERSION ?></span></h1>
@@ -148,7 +148,7 @@
 <footer><div class="wrap">
   <div>© جامعة سليمان الراجحي · الإدارة التنفيذية للاتصالات وتقنية المعلومات · <?= cfg.APP_NAME_AR ?> — الإصدار <?= cfg.VERSION ?></div>
   <a href="<?= cfg.ITOC_HUB_URL ?>" target="_blank" title="ITOC Forms Hub">
-    <img src="<?= cfg.LOGOS.ITOC ?>" alt="ITOC" onerror="this.style.display='none'"></a>
+    <img src="<?!= logos.ITOC ?>" alt="ITOC" onerror="this.style.display='none'"></a>
 </div></footer>
 
 <div class="toast" id="toast"></div>
@@ -186,7 +186,13 @@
     let hint = '';
     if (/has not been used|is disabled|people\.googleapis|People is not defined/i.test(msg))
       hint = 'خدمة <b class="en">People API</b> غير مفعّلة في المشروع: الصق <b class="en">appsscript.json</b> (v2.0) واحفظ ثم أعد النشر — أو من الرابط داخل رسالة الخطأ اضغط <b class="en">Enable</b>.';
-    else if (/insufficient authentication scopes|insufficient.*scope/i.test(msg))
+    else if (/do not have permission to call|insufficient authentication scopes|insufficient.*scope/i.test(msg)) {
+      const m = msg.match(/AUTH_URL:\s*(\S+)/);
+      hint = 'الصلاحيات الجديدة لم تُعتمد على حسابك بعد. ' + (m
+        ? '<a href="' + esc(m[1]) + '" target="_blank" class="btn btn-p" style="height:34px;margin:6px 0;text-decoration:none">اعتماد الصلاحيات</a> ثم اختر <b class="en">Select all</b> ووافق، وبعدها اضغط «مزامنة من حسابي».'
+        : 'افتح رابط التطبيق مع <b class="en">?admin=auth</b> واعتمد جميع الصلاحيات.');
+    }
+    else if (false)
       hint = 'الصلاحيات الجديدة لم تُعتمد بعد: Deploy ← Manage deployments ← New version ← وافق على صلاحيات Contacts، أو افتح <b class="en">?admin=sync</b>.';
     else if (/setup\(\)/.test(msg))
       hint = 'لم يُنفَّذ الإعداد بعد: افتح رابط التطبيق مع <b class="en">?admin=setup</b>.';
