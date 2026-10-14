@@ -180,12 +180,22 @@
   }
 
   /* Maps common setup errors to their fix */
+  /* Maps common errors to a fix — and ALWAYS shows Google's original message underneath */
   function explain(msg){
     msg = String(msg || '');
-    if (/setup\(\)/.test(msg)) return 'لم تُشغَّل دالة الإعداد بعد. افتح محرر Apps Script ← اختر الدالة <b class="en">setup</b> ← Run.';
-    if (/People is not defined|peopleapi/i.test(msg)) return 'خدمة <b class="en">People API</b> غير مفعّلة. في المحرر: Services ← (+) ← People API ← Add، ثم أعد النشر.';
-    if (/permission|insufficient|forbidden|403/i.test(msg)) return 'لا توجد صلاحية لقراءة دليل النطاق. تأكد من تفعيل <b class="en">Contact sharing</b> في Google Admin ← Directory settings، ومن تشغيل <b class="en">setup()</b> والموافقة على الصلاحيات.';
-    return 'تفاصيل الخطأ: <span class="en">' + esc(msg) + '</span>';
+    let hint = '';
+    if (/has not been used|is disabled|people\.googleapis|People is not defined/i.test(msg))
+      hint = 'خدمة <b class="en">People API</b> غير مفعّلة في المشروع: الصق <b class="en">appsscript.json</b> (v2.0) واحفظ ثم أعد النشر — أو من الرابط داخل رسالة الخطأ اضغط <b class="en">Enable</b>.';
+    else if (/insufficient authentication scopes|insufficient.*scope/i.test(msg))
+      hint = 'الصلاحيات الجديدة لم تُعتمد بعد: Deploy ← Manage deployments ← New version ← وافق على صلاحيات Contacts، أو افتح <b class="en">?admin=sync</b>.';
+    else if (/setup\(\)/.test(msg))
+      hint = 'لم يُنفَّذ الإعداد بعد: افتح رابط التطبيق مع <b class="en">?admin=setup</b>.';
+    else if (/caller does not have permission|PERMISSION_DENIED|forbidden|403/i.test(msg))
+      hint = 'حسابك لا يملك صلاحية قراءة هذا المصدر (غالباً دليل النطاق مخفي بسياسة Contact sharing). بقية المصادر تعمل إن ظهرت ✅ في تفاصيل الخطأ.';
+    return (hint ? hint + '<br>' : '') +
+      '<details open style="margin-top:8px"><summary style="cursor:pointer;color:var(--muted)">نص الخطأ من Google</summary>' +
+      '<pre class="en" style="white-space:pre-wrap;direction:ltr;text-align:left;background:var(--purple-light);padding:10px;border-radius:4px;font-size:12px;margin:6px 0 0">' +
+      esc(msg) + '</pre></details>';
   }
 
   function load(log, force, sync){

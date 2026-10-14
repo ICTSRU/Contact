@@ -2,7 +2,7 @@
  * ============================================================
  *  دليل الاتصال — SRU Contact Directory
  *  Sulaiman Al Rajhi University · ICTD · ITOC
- *  Version : 1.9
+ *  Version : 2.0
  *  Backend : Google Apps Script (Web App) + People API (Directory)
  * ============================================================
  *  Data source : synced from the owner's own Google account (no Admin console):
@@ -15,7 +15,7 @@
  */
 
 const CONFIG = {
-  VERSION: '1.9',
+  VERSION: '2.0',
   APP_NAME_AR: 'دليل الاتصال',
   APP_NAME_EN: 'SRU Contact Directory',
   DOMAIN: 'sr.edu.sa',

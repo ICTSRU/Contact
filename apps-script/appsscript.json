@@ -2,7 +2,11 @@
   "timeZone": "Asia/Riyadh",
   "exceptionLogging": "STACKDRIVER",
   "runtimeVersion": "V8",
-  "dependencies": {},
+  "dependencies": {
+    "enabledAdvancedServices": [
+      { "userSymbol": "People", "serviceId": "peopleapi", "version": "v1" }
+    ]
+  },
   "oauthScopes": [
     "https://www.googleapis.com/auth/directory.readonly",
     "https://www.googleapis.com/auth/contacts.readonly",
