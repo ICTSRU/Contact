@@ -29,7 +29,7 @@
 
   /* Search panel */
   .panel{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin:20px 0 14px;
-         display:grid;grid-template-columns:1fr 240px auto;gap:10px;align-items:center}
+         display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center}
   .search{position:relative}
   .search input{width:100%;height:46px;border:1px solid var(--border);border-radius:var(--radius);padding:0 44px 0 40px;
                 font:inherit;font-size:16px;background:var(--bg)}
@@ -120,7 +120,6 @@
              placeholder="ابحث بالاسم، البريد، الجوال، التحويلة، الإدارة أو المسمى…">
       <button class="clr" id="clr" title="مسح"><i data-lucide="x"></i></button>
     </div>
-    <select id="dept"><option value="">كل الإدارات</option></select>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <? if (isAdmin) { ?>
         <button class="btn btn-s" id="exp" title="تصدير النتائج CSV"><i data-lucide="download"></i>تصدير</button>
@@ -242,13 +241,14 @@
   }
 
   function fillDepts(){
+    if (!$('dept')) return;   // department filter removed in v2.5
     const set = [...new Set(ALL.map(p => p.department).filter(Boolean))].sort((a,b) => a.localeCompare(b,'ar'));
     $('dept').innerHTML = '<option value="">كل الإدارات</option>' + set.map(d => '<option>' + esc(d) + '</option>').join('');
   }
 
   /* Multi-word AND search across every field; numbers match any phone field (partial, ignoring spaces/+966) */
   function filter(){
-    const raw = $('q').value.trim(), dept = $('dept').value;
+    const raw = $('q').value.trim(), dept = $('dept') ? $('dept').value : '';
     // A query made only of digits/spaces/+/-/() is one phone number, not several words
     const terms = /^[\d٠-٩۰-۹\s+\-()]+$/.test(raw) ? [raw.replace(/[\s\-()]/g, '')] : raw.split(/\s+/).filter(Boolean);
     return ALL.filter(p => {
@@ -296,7 +296,7 @@
     const rows = last.slice((page - 1) * PAGE, page * PAGE);
 
     const chips = [];
-    if ($('dept').value) chips.push('الإدارة: ' + esc($('dept').value));
+    if ($('dept') && $('dept').value) chips.push('الإدارة: ' + esc($('dept').value));
     $('chips').innerHTML = chips.map(c => '<span class="chip">' + c + '</span>').join('');
 
     if (!rows.length){
@@ -340,7 +340,7 @@
 
   let deb;
   $('q').addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(() => { page = 1; render(); }, 150); });
-  $('dept').addEventListener('change', () => { page = 1; render(); });
+  if ($('dept')) $('dept').addEventListener('change', () => { page = 1; render(); });
   $('clr').addEventListener('click', () => { $('q').value = ''; page = 1; render(); $('q').focus(); });
   $('vT').addEventListener('click', () => { VIEW = 'table'; $('vT').classList.add('on'); $('vC').classList.remove('on'); render(); });
   $('vC').addEventListener('click', () => { VIEW = 'cards'; $('vC').classList.add('on'); $('vT').classList.remove('on'); render(); });
