@@ -204,6 +204,11 @@
       .withSuccessHandler(d => {
         done = true; clearTimeout(timer);
         if (!d || !d.people) return fail('لم تصل بيانات من الخادم', explain('empty response'));
+        if (!d.total) return fail('الدليل فارغ — لم تُقرأ أي سجلات',
+          'مصدر البيانات: <b class="en">' + esc(d.source || 'workspace') + '</b><br>' +
+          '1) Google Admin ← Directory ← <b class="en">Directory settings</b> ← <b class="en">Sharing settings</b>: فعّل <b class="en">Contact sharing</b> للنطاق.<br>' +
+          '2) أو الصق بيانات المنسوبين (تصدير Users من Google Admin) في ورقة <b class="en">Directory</b> بورقة الخلفية.<br>' +
+          '3) ثم من محرر Apps Script شغّل <b class="en">refreshDirectory</b>، أو اضغط «تحديث» إن كنت مشرفاً.');
         ALL = d.people.map(p => Object.assign(p, {
           _t: norm([p.name, p.nameAr, p.email, p.department, p.title].join(' ')),
           _d: [p.mobile, p.extension, p.workPhone].map(digits).join(' ')

@@ -2,7 +2,7 @@
  * ============================================================
  *  دليل الاتصال — SRU Contact Directory
  *  Sulaiman Al Rajhi University · ICTD · ITOC
- *  Version : 1.5
+ *  Version : 1.7
  *  Backend : Google Apps Script (Web App) + People API (Directory)
  * ============================================================
  *  Data source : Google Workspace directory of sr.edu.sa
@@ -15,7 +15,7 @@
  */
 
 const CONFIG = {
-  VERSION: '1.5',
+  VERSION: '1.7',
   APP_NAME_AR: 'دليل الاتصال',
   APP_NAME_EN: 'SRU Contact Directory',
   DOMAIN: 'sr.edu.sa',
@@ -37,7 +37,7 @@ const CONFIG = {
   USE_PEOPLE_API: true,                 // false = read only from the "Directory" sheet tab
   SHOW_MOBILE: true,                    // set false to hide mobile numbers for everyone
   ADMINS: [                             // may export CSV + see the "hidden" records count
-    // 'm.elmahdy@sr.edu.sa'
+    'm.elmahdy@sr.edu.sa'
   ],
 
   // Shared logo source (one place for all ITOC platforms) — update to your shared URLs
@@ -53,9 +53,15 @@ const CONFIG = {
 /*  Web app entry                                                      */
 /* ------------------------------------------------------------------ */
 
-function doGet() {
+function doGet(e) {
   const email = (Session.getActiveUser().getEmail() || '').toLowerCase();
   const allowed = email.endsWith('@' + CONFIG.DOMAIN);
+  const isAdmin = CONFIG.ADMINS.map(s => String(s).toLowerCase()).indexOf(email) > -1;
+
+  // Admin actions from the browser — avoids running from the editor:
+  //   …/exec?admin=diagnose   …/exec?admin=setup   …/exec?admin=refresh
+  const action = e && e.parameter && e.parameter.admin;
+  if (action) return adminPage_(action, email, isAdmin);
 
   const t = HtmlService.createTemplateFromFile(allowed ? 'Index' : 'Denied');
   t.cfg = CONFIG;
@@ -135,7 +141,8 @@ function refreshDirectory() {
     source: source,
     people: merged
   };
-  cachePut_('DIR', data);
+  // Never cache an empty directory — otherwise a fixed setting stays invisible for 6 hours
+  if (data.total > 0) cachePut_('DIR', data); else CacheService.getScriptCache().remove('DIR_n');
   return data;
 }
 
@@ -300,7 +307,9 @@ function setup() {
   ScriptApp.newTrigger('refreshDirectory').timeBased().everyHours(CONFIG.REFRESH_EVERY_HOURS).create();
 
   const data = refreshDirectory();
-  console.log('Setup done. Source: ' + data.source + ' | records: ' + data.total + ' | Sheet: ' + ss.getUrl());
+  const msg = 'Setup done. Source: ' + data.source + ' | records: ' + data.total + ' | Sheet: ' + ss.getUrl();
+  console.log(msg);
+  return msg;
 }
 
 /**
@@ -308,9 +317,11 @@ function setup() {
  * Tests each dependency on its own and logs ✅ / ❌ with the fix.
  */
 function diagnose() {
+  const out = [];
   const step = (name, fn, fix) => {
-    try { console.log('✅ ' + name + ' — ' + (fn() || 'OK')); return true; }
-    catch (e) { console.error('❌ ' + name + ' — ' + e.message + (fix ? '\n   → ' + fix : '')); return false; }
+    let line;
+    try { line = '✅ ' + name + ' — ' + (fn() || 'OK'); console.log(line); out.push(line); return true; }
+    catch (e) { line = '❌ ' + name + ' — ' + e.message + (fix ? '\n   → ' + fix : ''); console.error(line); out.push(line); return false; }
   };
 
   step('1. Signed-in account', () => {
@@ -355,7 +366,37 @@ function diagnose() {
   step('7. Directory sheet fallback', () => readSheetDirectory_().length + ' record(s) in the "Directory" tab',
     'Paste staff rows (or a Google Admin user export) into the "Directory" tab.');
 
-  console.log('Diagnostics finished — version ' + CONFIG.VERSION);
+  out.push('Diagnostics finished — version ' + CONFIG.VERSION);
+  console.log(out[out.length - 1]);
+  return out.join('\n');
+}
+
+/** Renders the result of an admin action as a simple branded page (admins only). */
+function adminPage_(action, email, isAdmin) {
+  let title, body;
+  if (!isAdmin) {
+    title = 'غير مصرّح';
+    body = 'هذه الإجراءات متاحة لمشرفي الدليل فقط.\nالحساب: ' + email;
+  } else {
+    title = 'Admin · ' + action;
+    try {
+      if (action === 'diagnose') body = diagnose();
+      else if (action === 'setup') body = setup();
+      else if (action === 'refresh') { const d = refreshDirectory(); body = 'Refreshed. Source: ' + d.source + ' | records: ' + d.total; }
+      else body = 'Unknown action. Use: diagnose | setup | refresh';
+    } catch (err) {
+      body = '❌ ' + err.message + '\n\n' + (err.stack || '');
+    }
+  }
+  const esc = t => String(t).replace(/[&<>]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;'}[c]));
+  const html = '<!DOCTYPE html><html dir="ltr"><head><meta charset="utf-8">' +
+    '<style>body{font-family:Cairo,Tahoma,Arial,sans-serif;background:#f7f5fb;margin:0;padding:24px;color:#241436}' +
+    '.box{max-width:900px;margin:auto;background:#fff;border:1px solid rgba(80,30,140,.12);border-top:4px solid #501e8c;border-radius:4px;padding:20px}' +
+    'h2{color:#501e8c;margin:0 0 12px}pre{white-space:pre-wrap;font-size:14px;line-height:1.8;background:#f0ebf8;padding:14px;border-radius:4px}' +
+    'a{color:#0a6eaa}</style></head><body><div class="box"><h2>' + esc(title) + '</h2><pre>' + esc(body) + '</pre>' +
+    '<p>' + ['diagnose', 'setup', 'refresh'].map(a => '<a href="?admin=' + a + '">' + a + '</a>').join(' · ') +
+    ' · <a href="?">فتح الدليل</a> — v' + CONFIG.VERSION + '</p></div></body></html>';
+  return HtmlService.createHtmlOutput(html).setTitle('Contact Directory · ' + action);
 }
 
 function ensureTab_(ss, name, headers) {
