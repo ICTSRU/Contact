@@ -1,4 +1,4 @@
-# دليل الاتصال — SRU Contact Directory · v1.7
+# دليل الاتصال — SRU Contact Directory · v1.9
 
 **رابط التطبيق / Web app:** https://script.google.com/macros/s/AKfycbwVgb1FJNwUJWMBuBVUuYjV-SQsszRKRm_k9uVcAi89hGUbPRg6PwwDFXKQIQZWuNdp/exec
 
@@ -15,7 +15,7 @@ Sulaiman Al Rajhi University staff directory, read live from the `sr.edu.sa` Goo
 
 ## هيكل المستودع / Repo structure
 ```
-ContactDirectory-v1.7/
+ContactDirectory-v1.9/
 ├── index.html            ← شاشة دخول ITOC (GitHub Pages) ← توجه إلى تطبيق Apps Script
 ├── apps-script/
 │   ├── Code.gs           ← الخادم: قراءة الدليل، الذاكرة المؤقتة، السجل، الاستثناءات
@@ -52,7 +52,7 @@ ContactDirectory-v1.7/
 | `EXTENSION_MAX_DIGITS` | الحد الأقصى لخانات التحويلة |
 | `LOGOS` | المصدر الموحد لشعارات SRU / ICTD / ITOC |
 
-## مصدر بديل: ورقة `Directory` (v1.7)
+## مصدر بديل: ورقة `Directory` (v1.9)
 إذا تعذّر استخدام People API (سياسة Google Workspace مثلاً)، يقرأ النظام تلقائياً من ورقة `Directory` في ورقة الخلفية:
 - Google Admin ← Users ← **Download users** ← CSV ← الصق المحتوى كما هو في ورقة `Directory`، أو
 - أدخل الأعمدة يدوياً: الاسم، البريد، الجوال، التحويلة، الإدارة، المسمى.
@@ -70,4 +70,4 @@ ContactDirectory-v1.7/
 تظهر التعديلات بعد التحديث التالي (كل ساعة) أو فوراً بزر **تحديث** للمشرفين.
 
 ---
-الإدارة التنفيذية للاتصالات وتقنية المعلومات · IT Operations Center (ITOC) · الإصدار 1.7
+الإدارة التنفيذية للاتصالات وتقنية المعلومات · IT Operations Center (ITOC) · الإصدار 1.9

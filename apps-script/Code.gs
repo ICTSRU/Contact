@@ -2,11 +2,11 @@
  * ============================================================
  *  دليل الاتصال — SRU Contact Directory
  *  Sulaiman Al Rajhi University · ICTD · ITOC
- *  Version : 1.7
+ *  Version : 1.9
  *  Backend : Google Apps Script (Web App) + People API (Directory)
  * ============================================================
- *  Data source : Google Workspace directory of sr.edu.sa
- *                (People API → listDirectoryPeople, DOMAIN_PROFILE)
+ *  Data source : synced from the owner's own Google account (no Admin console):
+ *                domain directory + My contacts (@sr.edu.sa only) → "Directory" tab
  *  Access      : @sr.edu.sa accounts only (deployment + server check)
  *  Logging     : every sign-in → Google Sheet tab "SignInLog"
  *  Overrides   : optional sheet tab "Overrides" to add/correct
@@ -15,7 +15,7 @@
  */
 
 const CONFIG = {
-  VERSION: '1.7',
+  VERSION: '1.9',
   APP_NAME_AR: 'دليل الاتصال',
   APP_NAME_EN: 'SRU Contact Directory',
   DOMAIN: 'sr.edu.sa',
@@ -34,7 +34,8 @@ const CONFIG = {
   EXTENSION_TYPES: ['work', 'extension', 'ext', 'internal', 'company_main'],
   EXTENSION_MAX_DIGITS: 5,              // any number with ≤ 5 digits = internal extension
 
-  USE_PEOPLE_API: true,                 // false = read only from the "Directory" sheet tab
+  AUTO_SYNC: true,                      // hourly trigger re-syncs the Directory tab from the owner's account
+  SYNC_SOURCES: ['directory', 'connections'],  // domain directory + My contacts ("Other contacts" is never read)
   SHOW_MOBILE: true,                    // set false to hide mobile numbers for everyone
   ADMINS: [                             // may export CSV + see the "hidden" records count
     'm.elmahdy@sr.edu.sa'
@@ -104,20 +105,19 @@ function forceRefresh() {
 /* ------------------------------------------------------------------ */
 
 /**
- * Builds the directory snapshot. Source order:
- *   1) Google Workspace directory via the People advanced service (if enabled & allowed)
- *   2) Fallback: the "Directory" tab of the backend sheet (Google Admin → Users → Download CSV)
+ * Builds the directory snapshot from the "Directory" tab.
+ * Unless skipSync is true and when AUTO_SYNC is on, it first syncs that tab
+ * from the owner's Google account (domain directory + contacts).
  */
-function refreshDirectory() {
-  let people = [], source = 'workspace';
-  try {
-    people = readWorkspaceDirectory_();
-    if (!people.length) throw new Error('Workspace directory returned 0 records');
-  } catch (e) {
-    console.warn('Workspace directory unavailable → using Directory sheet. Reason: ' + e.message);
-    people = readSheetDirectory_();
-    source = 'sheet';
+function refreshDirectory(skipSync) {
+  let source = 'sheet';
+  if (CONFIG.AUTO_SYNC && skipSync !== true) {
+    try { const r = syncToSheet_(); source = 'account-sync'; console.log(r.summary); }
+    catch (e) { console.warn('Account sync skipped: ' + e.message); }
+  } else if (skipSync === true) {
+    source = 'account-sync';
   }
+  const people = readSheetDirectory_();
 
   const overrides = readOverrides_();
   let hidden = 0;
@@ -146,26 +146,123 @@ function refreshDirectory() {
   return data;
 }
 
-/** Source 1 — Google Workspace directory (People advanced service). */
-function readWorkspaceDirectory_() {
-  if (!CONFIG.USE_PEOPLE_API) throw new Error('USE_PEOPLE_API is false');
-  if (typeof People === 'undefined') throw new Error('People service not added');
-  const people = [];
-  let pageToken = null;
+/* ------------------------------------------------------------------ */
+/*  Sync from the owner's own Google account (no Admin console needed) */
+/* ------------------------------------------------------------------ */
+
+const PEOPLE_FIELDS_ = 'names,emailAddresses,phoneNumbers,organizations,photos';
+
+/**
+ * Calls the People API with the script owner's own permissions.
+ * Uses the People advanced service when it is added; otherwise calls the
+ * REST endpoint directly with the owner's OAuth token (no service needed).
+ */
+function peopleCall_(kind, params) {
+  if (typeof People !== 'undefined') {
+    if (kind === 'directory') return People.People.listDirectoryPeople(params);
+    if (kind === 'connections') return People.People.Connections.list('people/me', params);
+  }
+  const base = 'https://people.googleapis.com/v1/';
+  const path = { directory: 'people:listDirectoryPeople', connections: 'people/me/connections' }[kind];
+  if (!path) throw new Error('Source not allowed: ' + kind);
+  const qs = Object.keys(params).filter(k => params[k] != null).map(k =>
+    [].concat(params[k]).map(v => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&')).join('&');
+  const res = UrlFetchApp.fetch(base + path + '?' + qs, {
+    headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+    muteHttpExceptions: true
+  });
+  const body = JSON.parse(res.getContentText() || '{}');
+  if (res.getResponseCode() !== 200) {
+    const msg = (body.error && body.error.message) || ('HTTP ' + res.getResponseCode());
+    throw new Error(msg);
+  }
+  return body;
+}
+
+/** Reads every page of one source and returns mapped @sr.edu.sa records. */
+function readSource_(kind) {
+  const out = [];
+  let pageToken = null, guard = 0;
   do {
-    const res = People.People.listDirectoryPeople({
-      readMask: 'names,emailAddresses,phoneNumbers,organizations,photos',
-      sources: ['DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE'],
-      pageSize: 1000,
-      pageToken: pageToken
-    });
-    (res.people || []).forEach(p => {
+    let params;
+    if (kind === 'directory') params = { readMask: PEOPLE_FIELDS_, pageSize: 1000, pageToken: pageToken,
+      sources: ['DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE', 'DIRECTORY_SOURCE_TYPE_DOMAIN_CONTACT'] };
+    else if (kind === 'connections') params = { personFields: PEOPLE_FIELDS_, pageSize: 1000, pageToken: pageToken };
+    else throw new Error('Source not allowed: ' + kind);
+    const res = peopleCall_(kind, params);
+    const list = res.people || res.connections || [];
+    list.forEach(p => {
       const rec = mapPerson_(p);
-      if (rec.email && rec.email.endsWith('@' + CONFIG.DOMAIN)) people.push(rec);
+      if (rec.email && rec.email.endsWith('@' + CONFIG.DOMAIN)) { rec.src = kind; out.push(rec); }
     });
     pageToken = res.nextPageToken;
-  } while (pageToken);
-  return people;
+  } while (pageToken && ++guard < 100);
+  return out;
+}
+
+/**
+ * Pulls the domain directory + "My contacts" (@sr.edu.sa only) from the
+ * owner's account, merges them by e-mail and writes the "Directory" tab.
+ * Existing rows are kept; synced values fill or update them; blanks never
+ * erase a value already in the sheet.
+ */
+function syncToSheet_() {
+  const report = [], byEmail = {};
+  const LABEL = { directory: 'دليل النطاق', connections: 'جهات اتصالي' };
+  CONFIG.SYNC_SOURCES.filter(k => LABEL[k]).forEach(kind => {
+    try {
+      const recs = readSource_(kind);
+      report.push('✅ ' + LABEL[kind] + ': ' + recs.length);
+      recs.forEach(r => {
+        const cur = byEmail[r.email] || (byEmail[r.email] = { email: r.email, src: [] });
+        ['name', 'mobile', 'extension', 'department', 'title', 'photo'].forEach(k => { if (!cur[k] && r[k]) cur[k] = r[k]; });
+        if (cur.src.indexOf(kind) < 0) cur.src.push(kind);
+      });
+    } catch (e) {
+      report.push('❌ ' + LABEL[kind] + ': ' + e.message);
+    }
+  });
+
+  const synced = Object.keys(byEmail).length;
+  if (!synced) throw new Error('لم تُجلب أي سجلات من الحساب.\n' + report.join('\n'));
+
+  // Merge with what is already in the sheet (manual rows are preserved)
+  const sh = getSheet_().getSheetByName('Directory') || getSheet_().insertSheet('Directory');
+  const HEAD = ['Name (الاسم)', 'Email (البريد)', 'Mobile (الجوال)', 'Extension (التحويلة)',
+                'Department (الإدارة)', 'Title (المسمى)', 'Photo', 'Source (المصدر)', 'Synced At'];
+  const existing = {};
+  readSheetDirectory_().forEach(p => {
+    if (String(p.src || '').trim() === 'other') return;   // remove rows imported from "Other contacts" by v1.8
+    existing[p.email] = p;
+  });
+  const now = Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm');
+  const emails = Object.keys(Object.assign({}, existing, byEmail)).sort();
+  const rows = emails.map(e => {
+    const s = byEmail[e] || {}, x = existing[e] || {};
+    const pick = k => s[k] || x[k] || '';
+    return [pick('name') || e, e, pick('mobile'), pick('extension'), pick('department'), pick('title'),
+            pick('photo'), s.src ? s.src.join(', ') : 'manual', s.src ? now : (x.syncedAt || '')];
+  });
+
+  sh.clearContents();
+  sh.getRange(1, 1, 1, HEAD.length).setValues([HEAD]).setFontWeight('bold').setBackground('#501e8c').setFontColor('#ffffff');
+  sh.getRange(2, 1, rows.length, HEAD.length).setNumberFormat('@').setValues(rows);
+  sh.setFrozenRows(1);
+
+  report.push('— الإجمالي في ورقة Directory: ' + rows.length + ' (جديد/محدَّث من الحساب: ' + synced + ')');
+  return { summary: report.join('\n'), total: rows.length, at: now };
+}
+
+/** UI button «مزامنة من حسابي» (admins only). Returns the report + fresh directory. */
+function syncFromMyAccount() {
+  const email = assertDomainUser_();
+  if (CONFIG.ADMINS.map(s => s.toLowerCase()).indexOf(email) === -1) {
+    throw new Error('المزامنة متاحة للمشرفين فقط.');
+  }
+  const r = syncToSheet_();
+  const data = refreshDirectory(true);
+  data.syncReport = r.summary;
+  return data;
 }
 
 /**
@@ -180,13 +277,14 @@ function readSheetDirectory_() {
   const head = rows.shift().map(h => String(h).toLowerCase());
   const col = (...keys) => head.findIndex(h => keys.some(k => h.indexOf(k) > -1));
   const c = {
-    name: col('full name', 'name (', 'الاسم'),
+    name: (i => i > -1 ? i : head.findIndex(h => h.trim() === 'name'))(col('full name', 'name (', 'الاسم')),
     first: col('first name'), last: col('last name'),
     email: col('email', 'البريد'),
     mobile: col('mobile', 'الجوال'),
     ext: col('extension', 'التحويلة', 'work phone', 'الهاتف الداخلي'),
     dept: col('department', 'الإدارة'),
-    title: col('title', 'المسمى')
+    title: col('title', 'المسمى'),
+    photo: col('photo'), synced: col('synced at'), src: col('source')
   };
   const v = (r, i) => (i > -1 ? String(r[i] || '').trim() : '');
   return rows.map(r => {
@@ -196,7 +294,8 @@ function readSheetDirectory_() {
     const m = ext.match(/(?:ext\.?|x|تحويلة)\s*(\d{2,6})\s*$/i);
     if (m) ext = m[1];
     return { name: name || email, nameAr: '', email: email, mobile: v(r, c.mobile), extension: ext,
-             workPhone: '', department: v(r, c.dept), title: v(r, c.title), photo: '' };
+             workPhone: '', department: v(r, c.dept), title: v(r, c.title), photo: v(r, c.photo),
+             syncedAt: v(r, c.synced), src: v(r, c.src) };
   }).filter(p => p.email && p.email.endsWith('@' + CONFIG.DOMAIN));
 }
 
@@ -207,8 +306,8 @@ function ping() {
 
 function mapPerson_(p) {
   const name = (p.names && p.names[0] && p.names[0].displayName) || '';
-  const email = ((p.emailAddresses || []).find(e => e.metadata && e.metadata.primary) ||
-                 (p.emailAddresses || [])[0] || {}).value || '';
+  const mails = (p.emailAddresses || []).map(e => String(e.value || '').trim());
+  const email = mails.find(m => m.toLowerCase().endsWith('@' + CONFIG.DOMAIN)) || '';   // university address only
   const org = (p.organizations || [])[0] || {};
   const photo = (p.photos || []).find(ph => !ph.default);
 
@@ -295,7 +394,7 @@ function setup() {
   const ss = SpreadsheetApp.openById(id);
   ensureTab_(ss, 'SignInLog', ['Email', 'Date', 'Time', 'App Version']);
   ensureTab_(ss, 'Directory', ['Name (الاسم)', 'Email (البريد)', 'Mobile (الجوال)', 'Extension (التحويلة)',
-                               'Department (الإدارة)', 'Title (المسمى)']);
+                               'Department (الإدارة)', 'Title (المسمى)', 'Photo', 'Source (المصدر)', 'Synced At']);
   ensureTab_(ss, 'Overrides', ['Email', 'NameAr (الاسم بالعربي)', 'Extension (التحويلة)',
                                'Mobile (الجوال)', 'Department (الإدارة)', 'Title (المسمى)', 'Hidden (إخفاء)']);
   const def = ss.getSheetByName('Sheet1') || ss.getSheetByName('ورقة1');
@@ -336,22 +435,11 @@ function diagnose() {
     return ss.getName() + ' | tabs: ' + ss.getSheets().map(s => s.getName()).join(', ');
   }, 'Check SHEET_ID in CONFIG and that this account can edit the sheet.');
 
-  step('3. People advanced service loaded', () => {
-    if (typeof People === 'undefined') throw new Error('People is not defined');
-    return 'People.People available';
-  }, 'Services (+) → Peopleapi → Identifier "People", Version v1 → Add.');
+  step('3. Domain directory (your account)', () => readSource_('directory').length + ' @' + CONFIG.DOMAIN + ' record(s)',
+    'If 0: the domain directory is hidden for your account (Contact sharing). My contacts below still work.');
 
-  step('4. Read sr.edu.sa directory', () => {
-    const res = People.People.listDirectoryPeople({
-      readMask: 'names,emailAddresses,phoneNumbers',
-      sources: ['DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE'],
-      pageSize: 5
-    });
-    const list = res.people || [];
-    if (!list.length) throw new Error('0 people returned');
-    return list.length + ' sample records, e.g. ' + mapPerson_(list[0]).email;
-  }, 'If "has not been used / disabled": open the link in the error and Enable People API. ' +
-     'If 0 records: Google Admin → Directory → Directory settings → Contact sharing = ON.');
+  step('4. My contacts (@' + CONFIG.DOMAIN + ' only)', () => readSource_('connections').length + ' record(s)',
+    'Redeploy (Manage deployments → New version) and approve the Contacts permissions.');
 
   step('5. Triggers permission', () => {
     return ScriptApp.getProjectTriggers().length + ' trigger(s) currently installed';
@@ -383,7 +471,8 @@ function adminPage_(action, email, isAdmin) {
       if (action === 'diagnose') body = diagnose();
       else if (action === 'setup') body = setup();
       else if (action === 'refresh') { const d = refreshDirectory(); body = 'Refreshed. Source: ' + d.source + ' | records: ' + d.total; }
-      else body = 'Unknown action. Use: diagnose | setup | refresh';
+      else if (action === 'sync') { const r = syncToSheet_(); const d = refreshDirectory(true); body = r.summary + '\n\nRecords now shown: ' + d.total; }
+      else body = 'Unknown action. Use: sync | diagnose | setup | refresh';
     } catch (err) {
       body = '❌ ' + err.message + '\n\n' + (err.stack || '');
     }
@@ -394,7 +483,7 @@ function adminPage_(action, email, isAdmin) {
     '.box{max-width:900px;margin:auto;background:#fff;border:1px solid rgba(80,30,140,.12);border-top:4px solid #501e8c;border-radius:4px;padding:20px}' +
     'h2{color:#501e8c;margin:0 0 12px}pre{white-space:pre-wrap;font-size:14px;line-height:1.8;background:#f0ebf8;padding:14px;border-radius:4px}' +
     'a{color:#0a6eaa}</style></head><body><div class="box"><h2>' + esc(title) + '</h2><pre>' + esc(body) + '</pre>' +
-    '<p>' + ['diagnose', 'setup', 'refresh'].map(a => '<a href="?admin=' + a + '">' + a + '</a>').join(' · ') +
+    '<p>' + ['sync', 'diagnose', 'setup', 'refresh'].map(a => '<a href="?admin=' + a + '">' + a + '</a>').join(' · ') +
     ' · <a href="?">فتح الدليل</a> — v' + CONFIG.VERSION + '</p></div></body></html>';
   return HtmlService.createHtmlOutput(html).setTitle('Contact Directory · ' + action);
 }

@@ -124,7 +124,8 @@
     <div style="display:flex;gap:6px;flex-wrap:wrap">
       <? if (isAdmin) { ?>
         <button class="btn btn-s" id="exp" title="تصدير النتائج CSV"><i data-lucide="download"></i>تصدير</button>
-        <button class="btn btn-s" id="ref" title="تحديث البيانات من دليل Google"><i data-lucide="refresh-cw"></i>تحديث</button>
+        <button class="btn btn-p" id="sync" title="جلب منسوبي الجامعة من حسابي في Google (دليل النطاق + جهات الاتصال)"><i data-lucide="cloud-download"></i>مزامنة من حسابي</button>
+        <button class="btn btn-s" id="ref" title="إعادة قراءة ورقة الدليل"><i data-lucide="refresh-cw"></i>تحديث</button>
       <? } ?>
       <button class="btn btn-p" onclick="window.print()"><i data-lucide="printer"></i>طباعة</button>
     </div>
@@ -187,7 +188,7 @@
     return 'تفاصيل الخطأ: <span class="en">' + esc(msg) + '</span>';
   }
 
-  function load(log, force){
+  function load(log, force, sync){
     // Opened outside Apps Script (GitHub Pages / local file) → server bridge does not exist
     if (!(window.google && google.script && google.script.run)) {
       fail('يجب فتح الدليل من رابط تطبيق Google Apps Script',
@@ -203,12 +204,12 @@
     const r = google.script.run
       .withSuccessHandler(d => {
         done = true; clearTimeout(timer);
+        if (d && d.syncReport) showReport(d.syncReport);
         if (!d || !d.people) return fail('لم تصل بيانات من الخادم', explain('empty response'));
         if (!d.total) return fail('الدليل فارغ — لم تُقرأ أي سجلات',
           'مصدر البيانات: <b class="en">' + esc(d.source || 'workspace') + '</b><br>' +
-          '1) Google Admin ← Directory ← <b class="en">Directory settings</b> ← <b class="en">Sharing settings</b>: فعّل <b class="en">Contact sharing</b> للنطاق.<br>' +
-          '2) أو الصق بيانات المنسوبين (تصدير Users من Google Admin) في ورقة <b class="en">Directory</b> بورقة الخلفية.<br>' +
-          '3) ثم من محرر Apps Script شغّل <b class="en">refreshDirectory</b>، أو اضغط «تحديث» إن كنت مشرفاً.');
+          'اضغط زر <b>«مزامنة من حسابي»</b> لجلب منسوبي الجامعة من حسابك في Google (دليل النطاق + جهات الاتصال) — دون الحاجة إلى Google Admin.<br>' +
+          'يمكن أيضاً إضافة السجلات يدوياً في ورقة <b class="en">Directory</b> بورقة الخلفية ثم الضغط على «تحديث».');
         ALL = d.people.map(p => Object.assign(p, {
           _t: norm([p.name, p.nameAr, p.email, p.department, p.title].join(' ')),
           _d: [p.mobile, p.extension, p.workPhone].map(digits).join(' ')
@@ -221,7 +222,7 @@
         done = true; clearTimeout(timer);
         fail('تعذّر تحميل البيانات', explain(e && e.message));
       });
-    force ? r.forceRefresh() : r.getDirectory(!!log);
+    sync ? r.syncFromMyAccount() : force ? r.forceRefresh() : r.getDirectory(!!log);
   }
 
   function fillDepts(){
@@ -335,6 +336,19 @@
   });
   if ($('exp')) $('exp').addEventListener('click', exportCsv);
   if ($('ref')) $('ref').addEventListener('click', () => load(false, true));
+  if ($('sync')) $('sync').addEventListener('click', () => {
+    $('out').innerHTML = '<div class="loading"><div class="spin"></div>جارٍ المزامنة من حسابك (دليل النطاق وجهات الاتصال)…</div>';
+    load(false, false, true);
+  });
+
+  /* Sync result panel shown above the table */
+  function showReport(text){
+    let box = $('syncRep');
+    if (!box) { box = document.createElement('div'); box.id = 'syncRep'; $('out').parentNode.insertBefore(box, $('out')); }
+    box.style.cssText = 'background:#fff;border:1px solid var(--border);border-inline-start:4px solid var(--blue);border-radius:4px;padding:10px 14px;margin-bottom:10px;font-size:13px;line-height:1.9;white-space:pre-line';
+    box.innerHTML = '<b style="color:var(--purple)">نتيجة المزامنة</b>\n' + esc(text) +
+      ' <button class="cp" style="float:left" onclick="this.parentNode.remove()" title="إغلاق">✕</button>';
+  }
   document.addEventListener('keydown', e => { if (e.key === '/' && document.activeElement !== $('q')) { e.preventDefault(); $('q').focus(); } });
 
   icons();
