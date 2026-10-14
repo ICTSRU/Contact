@@ -2,7 +2,7 @@
  * ============================================================
  *  دليل الاتصال — SRU Contact Directory
  *  Sulaiman Al Rajhi University · ICTD · ITOC
- *  Version : 1.3
+ *  Version : 1.5
  *  Backend : Google Apps Script (Web App) + People API (Directory)
  * ============================================================
  *  Data source : Google Workspace directory of sr.edu.sa
@@ -15,7 +15,7 @@
  */
 
 const CONFIG = {
-  VERSION: '1.3',
+  VERSION: '1.5',
   APP_NAME_AR: 'دليل الاتصال',
   APP_NAME_EN: 'SRU Contact Directory',
   DOMAIN: 'sr.edu.sa',
@@ -34,6 +34,7 @@ const CONFIG = {
   EXTENSION_TYPES: ['work', 'extension', 'ext', 'internal', 'company_main'],
   EXTENSION_MAX_DIGITS: 5,              // any number with ≤ 5 digits = internal extension
 
+  USE_PEOPLE_API: true,                 // false = read only from the "Directory" sheet tab
   SHOW_MOBILE: true,                    // set false to hide mobile numbers for everyone
   ADMINS: [                             // may export CSV + see the "hidden" records count
     // 'm.elmahdy@sr.edu.sa'
@@ -96,24 +97,21 @@ function forceRefresh() {
 /*  Directory build                                                    */
 /* ------------------------------------------------------------------ */
 
-/** Reads the whole sr.edu.sa directory, merges overrides, caches the result. */
+/**
+ * Builds the directory snapshot. Source order:
+ *   1) Google Workspace directory via the People advanced service (if enabled & allowed)
+ *   2) Fallback: the "Directory" tab of the backend sheet (Google Admin → Users → Download CSV)
+ */
 function refreshDirectory() {
-  const people = [];
-  let pageToken = null;
-
-  do {
-    const res = People.People.listDirectoryPeople({
-      readMask: 'names,emailAddresses,phoneNumbers,organizations,photos',
-      sources: ['DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE'],
-      pageSize: 1000,
-      pageToken: pageToken
-    });
-    (res.people || []).forEach(p => {
-      const rec = mapPerson_(p);
-      if (rec.email && rec.email.endsWith('@' + CONFIG.DOMAIN)) people.push(rec);
-    });
-    pageToken = res.nextPageToken;
-  } while (pageToken);
+  let people = [], source = 'workspace';
+  try {
+    people = readWorkspaceDirectory_();
+    if (!people.length) throw new Error('Workspace directory returned 0 records');
+  } catch (e) {
+    console.warn('Workspace directory unavailable → using Directory sheet. Reason: ' + e.message);
+    people = readSheetDirectory_();
+    source = 'sheet';
+  }
 
   const overrides = readOverrides_();
   let hidden = 0;
@@ -134,10 +132,70 @@ function refreshDirectory() {
     updatedAt: Utilities.formatDate(new Date(), CONFIG.TIMEZONE, 'yyyy-MM-dd HH:mm'),
     total: merged.length,
     hidden: hidden,
+    source: source,
     people: merged
   };
   cachePut_('DIR', data);
   return data;
+}
+
+/** Source 1 — Google Workspace directory (People advanced service). */
+function readWorkspaceDirectory_() {
+  if (!CONFIG.USE_PEOPLE_API) throw new Error('USE_PEOPLE_API is false');
+  if (typeof People === 'undefined') throw new Error('People service not added');
+  const people = [];
+  let pageToken = null;
+  do {
+    const res = People.People.listDirectoryPeople({
+      readMask: 'names,emailAddresses,phoneNumbers,organizations,photos',
+      sources: ['DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE'],
+      pageSize: 1000,
+      pageToken: pageToken
+    });
+    (res.people || []).forEach(p => {
+      const rec = mapPerson_(p);
+      if (rec.email && rec.email.endsWith('@' + CONFIG.DOMAIN)) people.push(rec);
+    });
+    pageToken = res.nextPageToken;
+  } while (pageToken);
+  return people;
+}
+
+/**
+ * Source 2 — "Directory" tab. Columns are matched by header name, so a raw
+ * Google Admin user export (First Name, Last Name, Email Address, Mobile Phone,
+ * Work Phone, Department, Employee Title …) can be pasted as-is.
+ */
+function readSheetDirectory_() {
+  const sh = getSheet_().getSheetByName('Directory');
+  if (!sh || sh.getLastRow() < 2) return [];
+  const rows = sh.getDataRange().getDisplayValues();
+  const head = rows.shift().map(h => String(h).toLowerCase());
+  const col = (...keys) => head.findIndex(h => keys.some(k => h.indexOf(k) > -1));
+  const c = {
+    name: col('full name', 'name (', 'الاسم'),
+    first: col('first name'), last: col('last name'),
+    email: col('email', 'البريد'),
+    mobile: col('mobile', 'الجوال'),
+    ext: col('extension', 'التحويلة', 'work phone', 'الهاتف الداخلي'),
+    dept: col('department', 'الإدارة'),
+    title: col('title', 'المسمى')
+  };
+  const v = (r, i) => (i > -1 ? String(r[i] || '').trim() : '');
+  return rows.map(r => {
+    const email = v(r, c.email).toLowerCase();
+    const name = v(r, c.name) || [v(r, c.first), v(r, c.last)].filter(Boolean).join(' ');
+    let ext = v(r, c.ext);
+    const m = ext.match(/(?:ext\.?|x|تحويلة)\s*(\d{2,6})\s*$/i);
+    if (m) ext = m[1];
+    return { name: name || email, nameAr: '', email: email, mobile: v(r, c.mobile), extension: ext,
+             workPhone: '', department: v(r, c.dept), title: v(r, c.title), photo: '' };
+  }).filter(p => p.email && p.email.endsWith('@' + CONFIG.DOMAIN));
+}
+
+/** Smallest possible test: if this fails too, the problem is the account/project, not the code. */
+function ping() {
+  console.log('pong — ' + new Date() + ' — v' + CONFIG.VERSION);
 }
 
 function mapPerson_(p) {
@@ -229,6 +287,8 @@ function setup() {
   }
   const ss = SpreadsheetApp.openById(id);
   ensureTab_(ss, 'SignInLog', ['Email', 'Date', 'Time', 'App Version']);
+  ensureTab_(ss, 'Directory', ['Name (الاسم)', 'Email (البريد)', 'Mobile (الجوال)', 'Extension (التحويلة)',
+                               'Department (الإدارة)', 'Title (المسمى)']);
   ensureTab_(ss, 'Overrides', ['Email', 'NameAr (الاسم بالعربي)', 'Extension (التحويلة)',
                                'Mobile (الجوال)', 'Department (الإدارة)', 'Title (المسمى)', 'Hidden (إخفاء)']);
   const def = ss.getSheetByName('Sheet1') || ss.getSheetByName('ورقة1');
@@ -240,7 +300,62 @@ function setup() {
   ScriptApp.newTrigger('refreshDirectory').timeBased().everyHours(CONFIG.REFRESH_EVERY_HOURS).create();
 
   const data = refreshDirectory();
-  console.log('Setup done. Sheet: ' + ss.getUrl() + ' | records: ' + data.total);
+  console.log('Setup done. Source: ' + data.source + ' | records: ' + data.total + ' | Sheet: ' + ss.getUrl());
+}
+
+/**
+ * Run from the editor when setup() fails with an unclear error.
+ * Tests each dependency on its own and logs ✅ / ❌ with the fix.
+ */
+function diagnose() {
+  const step = (name, fn, fix) => {
+    try { console.log('✅ ' + name + ' — ' + (fn() || 'OK')); return true; }
+    catch (e) { console.error('❌ ' + name + ' — ' + e.message + (fix ? '\n   → ' + fix : '')); return false; }
+  };
+
+  step('1. Signed-in account', () => {
+    const me = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
+    if (!me) throw new Error('No account e-mail returned');
+    if (!me.toLowerCase().endsWith('@' + CONFIG.DOMAIN)) throw new Error('Running as ' + me);
+    return me;
+  }, 'Open script.google.com in an incognito window signed in ONLY with your @' + CONFIG.DOMAIN + ' account.');
+
+  step('2. Backend sheet access', () => {
+    const ss = SpreadsheetApp.openById(CONFIG.SHEET_ID || PropertiesService.getScriptProperties().getProperty('SHEET_ID'));
+    return ss.getName() + ' | tabs: ' + ss.getSheets().map(s => s.getName()).join(', ');
+  }, 'Check SHEET_ID in CONFIG and that this account can edit the sheet.');
+
+  step('3. People advanced service loaded', () => {
+    if (typeof People === 'undefined') throw new Error('People is not defined');
+    return 'People.People available';
+  }, 'Services (+) → Peopleapi → Identifier "People", Version v1 → Add.');
+
+  step('4. Read sr.edu.sa directory', () => {
+    const res = People.People.listDirectoryPeople({
+      readMask: 'names,emailAddresses,phoneNumbers',
+      sources: ['DIRECTORY_SOURCE_TYPE_DOMAIN_PROFILE'],
+      pageSize: 5
+    });
+    const list = res.people || [];
+    if (!list.length) throw new Error('0 people returned');
+    return list.length + ' sample records, e.g. ' + mapPerson_(list[0]).email;
+  }, 'If "has not been used / disabled": open the link in the error and Enable People API. ' +
+     'If 0 records: Google Admin → Directory → Directory settings → Contact sharing = ON.');
+
+  step('5. Triggers permission', () => {
+    return ScriptApp.getProjectTriggers().length + ' trigger(s) currently installed';
+  }, 'Run again and approve all permissions (scope: script.scriptapp).');
+
+  step('6. Cache service', () => {
+    cachePut_('DIAG', { t: Date.now() });
+    if (!cacheGet_('DIAG')) throw new Error('Cache read-back failed');
+    return 'write/read OK';
+  });
+
+  step('7. Directory sheet fallback', () => readSheetDirectory_().length + ' record(s) in the "Directory" tab',
+    'Paste staff rows (or a Google Admin user export) into the "Directory" tab.');
+
+  console.log('Diagnostics finished — version ' + CONFIG.VERSION);
 }
 
 function ensureTab_(ss, name, headers) {
@@ -270,7 +385,7 @@ function cachePut_(key, obj) {
   const json = JSON.stringify(obj);
   const size = 90000, parts = {};
   const n = Math.ceil(json.length / size);
-  for (let i = 0; i < n; i++) parts[key + '_' + i] = json.substr(i * size, size);
+  for (let i = 0; i < n; i++) parts[key + '_' + i] = json.slice(i * size, (i + 1) * size);
   parts[key + '_n'] = String(n);
   cache.putAll(parts, CONFIG.CACHE_SECONDS);
 }

@@ -1,4 +1,4 @@
-# دليل الاتصال — SRU Contact Directory · v1.3
+# دليل الاتصال — SRU Contact Directory · v1.5
 
 **رابط التطبيق / Web app:** https://script.google.com/macros/s/AKfycbwVgb1FJNwUJWMBuBVUuYjV-SQsszRKRm_k9uVcAi89hGUbPRg6PwwDFXKQIQZWuNdp/exec
 
@@ -15,7 +15,7 @@ Sulaiman Al Rajhi University staff directory, read live from the `sr.edu.sa` Goo
 
 ## هيكل المستودع / Repo structure
 ```
-ContactDirectory-v1.3/
+ContactDirectory-v1.5/
 ├── index.html            ← شاشة دخول ITOC (GitHub Pages) ← توجه إلى تطبيق Apps Script
 ├── apps-script/
 │   ├── Code.gs           ← الخادم: قراءة الدليل، الذاكرة المؤقتة، السجل، الاستثناءات
@@ -52,6 +52,13 @@ ContactDirectory-v1.3/
 | `EXTENSION_MAX_DIGITS` | الحد الأقصى لخانات التحويلة |
 | `LOGOS` | المصدر الموحد لشعارات SRU / ICTD / ITOC |
 
+## مصدر بديل: ورقة `Directory` (v1.5)
+إذا تعذّر استخدام People API (سياسة Google Workspace مثلاً)، يقرأ النظام تلقائياً من ورقة `Directory` في ورقة الخلفية:
+- Google Admin ← Users ← **Download users** ← CSV ← الصق المحتوى كما هو في ورقة `Directory`، أو
+- أدخل الأعمدة يدوياً: الاسم، البريد، الجوال، التحويلة، الإدارة، المسمى.
+
+تُطابَق الأعمدة بالاسم (عربي أو إنجليزي)، ولا يلزم ترتيب معيّن. لتعطيل People API نهائياً: `USE_PEOPLE_API: false`.
+
 ## ورقة الاستثناءات `Overrides`
 لإضافة تحويلة غير موجودة في Workspace أو تصحيحها أو إخفاء حساب (مثل الحسابات الخدمية):
 
@@ -63,4 +70,4 @@ ContactDirectory-v1.3/
 تظهر التعديلات بعد التحديث التالي (كل ساعة) أو فوراً بزر **تحديث** للمشرفين.
 
 ---
-الإدارة التنفيذية للاتصالات وتقنية المعلومات · IT Operations Center (ITOC) · الإصدار 1.3
+الإدارة التنفيذية للاتصالات وتقنية المعلومات · IT Operations Center (ITOC) · الإصدار 1.5
