@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>دليل الاتصال | SRU Contact Directory v1.3</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{--purple:#501e8c;--purple-dark:#3a1464;--purple-light:#f0ebf8;--blue:#0a6eaa;--bg:#f7f5fb;--ink:#241436;--muted:#6b5a80;--border:rgba(80,30,140,.12)}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;flex-direction:column;background:var(--bg);font-family:Cairo,Tahoma,Arial,sans-serif;color:var(--ink)}
+  .en{direction:ltr;unicode-bidi:isolate;display:inline-block}
+  .band{background:#fff;border-bottom:1px solid var(--border)}
+  .band div{max-width:1100px;margin:0 auto;padding:0 16px;height:84px;display:flex;align-items:center;justify-content:space-between}
+  .band img{max-height:58px;max-width:42vw;object-fit:contain}
+  .diag{height:4px;background:linear-gradient(90deg,var(--blue) 0 35%,var(--purple) 35% 100%)}
+  main{flex:1;display:flex;align-items:center;justify-content:center;padding:28px 16px}
+  .card{background:#fff;border:1px solid var(--border);border-top:4px solid var(--purple);border-radius:4px;max-width:480px;width:100%;padding:32px 28px;text-align:center}
+  .itoc{height:56px;margin-bottom:8px}
+  h1{margin:6px 0 2px;color:var(--purple);font-size:26px;font-weight:800}
+  .sub{color:var(--muted);margin:0 0 18px}
+  .note{background:var(--purple-light);border-radius:4px;padding:12px 14px;font-size:14px;line-height:1.9;text-align:right}
+  .btn{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:20px;background:var(--purple);color:#fff;text-decoration:none;
+       height:48px;border-radius:4px;font-weight:700;font-size:16px}
+  .btn:hover{background:var(--purple-dark)}
+  .btn svg{width:20px;height:20px;background:#fff;border-radius:50%;padding:2px}
+  .ver{margin-top:16px;font-size:12px;color:var(--muted)}
+  footer{background:#fff;border-top:1px solid var(--border)}
+  footer div{max-width:1100px;margin:0 auto;padding:0 16px;min-height:60px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted)}
+  footer img{height:38px}
+</style>
+</head>
+<body>
+  <!-- Official header band: SRU right, ICTD left (shared logo source) -->
+  <header class="band"><div>
+    <img src="https://ictsru.github.io/ITOC/assets/logos/sru.png" alt="جامعة سليمان الراجحي">
+    <img src="https://ictsru.github.io/ITOC/assets/logos/ictd.png" alt="الإدارة التنفيذية للاتصالات وتقنية المعلومات">
+  </div></header>
+  <div class="diag"></div>
+
+  <main>
+    <section class="card">
+      <img class="itoc" src="https://ictsru.github.io/ITOC/assets/logos/itoc.png" alt="ITOC — IT Operations Center">
+      <h1>دليل الاتصال</h1>
+      <p class="sub en">SRU Contact Directory</p>
+      <div class="note">
+        دليل منسوبي جامعة سليمان الراجحي: الاسم، البريد الإلكتروني، الجوال والهاتف الداخلي، مع البحث بأي بيان.<br>
+        <b>الدخول متاح فقط بالبريد الجامعي</b> <span class="en">@sr.edu.sa</span> عبر حساب Google الخاص بالجامعة.
+      </div>
+      <!-- Apps Script web app (deployment /exec) -->
+      <a class="btn" id="go" href="https://script.google.com/macros/s/AKfycbwVgb1FJNwUJWMBuBVUuYjV-SQsszRKRm_k9uVcAi89hGUbPRg6PwwDFXKQIQZWuNdp/exec">
+        <svg viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.9 6.1C12.5 13.6 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.7 6c4.5-4.2 6.9-10.3 6.9-17.7z"/><path fill="#FBBC05" d="M10.6 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.1C1 16.6 0 20.2 0 24s1 7.4 2.7 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.7-6c-2.2 1.5-5 2.3-8.2 2.3-6.2 0-11.5-4.1-13.4-9.8l-7.9 6.1C6.6 42.6 14.6 48 24 48z"/></svg>
+        تسجيل الدخول بحساب الجامعة
+      </a>
+      <div class="ver">الإصدار 1.3</div>
+    </section>
+  </main>
+
+  <footer><div>
+    <span>© جامعة سليمان الراجحي · الإدارة التنفيذية للاتصالات وتقنية المعلومات</span>
+    <a href="https://ictsru.github.io/ITOC/#forms" target="_blank"><img src="https://ictsru.github.io/ITOC/assets/logos/itoc.png" alt="ITOC"></a>
+  </div></footer>
+<script>
+  // Pre-select the university account in Google's chooser
+  (function(){
+    var a = document.getElementById('go'), u = a.getAttribute('href');
+    if (u.indexOf('http') === 0) a.href = 'https://accounts.google.com/AccountChooser?hd=sr.edu.sa&continue=' + encodeURIComponent(u);
+    else a.addEventListener('click', function(e){ e.preventDefault();
+      alert('لم يُضبط رابط التطبيق بعد.\nضع رابط Apps Script المنتهي بـ /exec مكان WEB_APP_URL في ملف index.html'); });
+  })();
+</script>
+</body>
+</html>

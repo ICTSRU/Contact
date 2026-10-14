@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f7f5fb;font-family:Cairo,Tahoma,Arial,sans-serif;color:#241436;padding:16px}
+  .box{background:#fff;border:1px solid rgba(80,30,140,.12);border-top:4px solid #501e8c;border-radius:4px;max-width:460px;padding:28px;text-align:center}
+  h2{color:#501e8c;margin:0 0 10px}
+  p{color:#6b5a80;line-height:1.8}
+  .en{direction:ltr;unicode-bidi:isolate;display:inline-block}
+  a{display:inline-block;margin-top:10px;background:#501e8c;color:#fff;text-decoration:none;padding:9px 18px;border-radius:4px;font-weight:700}
+</style>
+</head>
+<body>
+  <div class="box">
+    <h2>الدخول غير مصرّح</h2>
+    <p><?= cfg.APP_NAME_AR ?> متاح لمنسوبي جامعة سليمان الراجحي فقط.<br>
+       يرجى تسجيل الدخول بالبريد الجامعي <span class="en">@<?= cfg.DOMAIN ?></span>.</p>
+    <p style="font-size:13px">الحساب الحالي: <span class="en"><?= userEmail || '—' ?></span></p>
+    <a href="https://accounts.google.com/AccountChooser?hd=<?= cfg.DOMAIN ?>">تبديل الحساب</a>
+    <p style="font-size:12px;margin-top:18px">الإصدار <?= cfg.VERSION ?></p>
+  </div>
+</body>
+</html>
